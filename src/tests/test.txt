@@ -1,0 +1,10 @@
+i : INT = 30
+j : INT = 5
+i
+j 
+i + j
+i * j * 3
+i + j * 3
+i * j + 3
+
+i + j + 1

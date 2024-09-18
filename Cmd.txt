@@ -1,0 +1,6 @@
+
+antlr -visitor Grammer.g4
+
+javac *.java
+
+grun antlr.Golang sourceFile ./tests/example.txt -gui
