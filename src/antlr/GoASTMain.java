@@ -7,28 +7,7 @@ import java.io.*;
 
 public class GoASTMain {
     public static void main(String[] args) throws IOException {
-    	CharStream input = CharStreams.fromFileName("D:\\Mini-Project\\GoAntlr\\src\\tests\\ex.go");
-    	
-    	
-    	 String goCode = 
-    	            "package main\n\n" +
-    	            "import (\n" +
-    	            "    \"fmt\"\n" +
-    	            ")\n\n" +
-    	            "func main() {\n" +
-    	            "    number := 5\n" +
-    	            "    \n" +
-    	            "    if number % 2 == 0 {\n" +
-    	            "        fmt.Println(number, \"is even\")\n" +
-    	            "    } else {\n" +
-    	            "        fmt.Println(number, \"is odd\")\n" +
-    	            "    }\n" +
-    	            "    \n" +
-    	            "    fmt.Println(\"Counting from 1 to 5:\")\n" +
-    	            "    for i := 1; i <= 5; i++ {\n" +
-    	            "        fmt.Println(i)\n" +
-    	            "    }\n" +
-    	            "}\n";
+    	CharStream input = CharStreams.fromFileName("/Users/karandeepsingh/git/GoAntlr/src/tests/ex.go");
 
         // Create lexer and parser
         GoLexer lexer = new GoLexer(input);
@@ -44,6 +23,43 @@ public class GoASTMain {
         
         // Print the AST structure
         printAST(ast, 0);
+        generateAndPrintCFG(ast);
+        
+//     // Generate CFG
+//        CFGBuilder builder = new CFGBuilder();
+//        CFGNode cfg = builder.build(ast);
+//        String mermaidDiagram = builder.generateMermaidDiagram(cfg);
+//        
+//        try {
+//            // Generate PNG file
+//            MermaidDiagramGenerator.generateDiagramFile(
+//                mermaidDiagram,
+//                "cfg_diagram.png",
+//                "png"
+//            );
+//            
+//            // Generate SVG file
+//            MermaidDiagramGenerator.generateDiagramFile(
+//                mermaidDiagram,
+//                "cfg_diagram.svg",
+//                "svg"
+//            );
+//            
+//            System.out.println("Diagram files generated successfully!");
+//            
+//        } catch (IOException | InterruptedException e) {
+//            System.err.println("Failed to generate diagram: " + e.getMessage());
+//            e.printStackTrace();
+//        }
+    }
+    
+ // Add this to your GoASTMain class:
+    private static void generateAndPrintCFG(ASTNode ast) {
+        CFGBuilder builder = new CFGBuilder();
+        CFGNode cfg = builder.build(ast);
+        String mermaidDiagram = builder.generateMermaidDiagram(cfg);
+        System.out.println("\nControl Flow Graph:");
+        System.out.println(mermaidDiagram);
     }
     
     private static void printAST(ASTNode node, int indent) {
@@ -170,6 +186,23 @@ public class GoASTMain {
             ExpressionStatementNode exprStmt = (ExpressionStatementNode) node;
             System.out.println(indentStr + "Expression Statement (line " + node.line + ")");
             printAST(exprStmt.expression, indent + 1);
+        }
+        else if (node instanceof FmtPrintNode) {
+            FmtPrintNode fmt = (FmtPrintNode) node;
+            System.out.println(indentStr + "fmt." + fmt.printType + " Statement (line " + node.line + ")");
+            if (!fmt.arguments.isEmpty()) {
+                System.out.println(indentStr + "  Arguments:");
+                for (ExpressionNode arg : fmt.arguments) {
+                    printAST(arg, indent + 2);
+                }
+            }
+        }
+        else if (node instanceof IncDecExpressionNode) {
+            IncDecExpressionNode incDec = (IncDecExpressionNode) node;
+            System.out.println(indentStr + "IncDec Expression (line " + node.line + ")");
+            System.out.println(indentStr + "  Operator: " + incDec.operator);
+            System.out.println(indentStr + "  Operand:");
+            printAST(incDec.operand, indent + 2);
         }
         else {
             System.out.println(indentStr + "Unknown Node Type: " + node.getClass().getSimpleName() + 

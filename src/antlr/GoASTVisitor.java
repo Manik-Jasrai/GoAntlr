@@ -187,6 +187,49 @@ class LiteralNode extends ExpressionNode {
     }
 }
 
+//First update the FmtPrintNode to extend ExpressionNode instead of StatementNode
+class FmtPrintNode extends ExpressionNode {
+ List<ExpressionNode> arguments;
+ String printType; // "Print", "Println", "Printf"
+ 
+ public FmtPrintNode(int line, int column, String printType) {
+     super(line, column);
+     this.arguments = new ArrayList<>();
+     this.printType = printType;
+ }
+}
+
+class UnaryExpressionNode extends ExpressionNode {
+ String operator;
+ ExpressionNode operand;
+ 
+ public UnaryExpressionNode(int line, int column, String operator, ExpressionNode operand) {
+     super(line, column);
+     this.operator = operator;
+     this.operand = operand;
+ }
+}
+
+class PackageImportNode extends ImportNode {
+ String packageName;
+ 
+ public PackageImportNode(int line, int column, String packageName, String path) {
+     super(line, column, null, path);
+     this.packageName = packageName;
+ }
+}
+
+class IncDecExpressionNode extends ExpressionNode {
+    String operator; // "++" or "--"
+    ExpressionNode operand;
+    
+    public IncDecExpressionNode(int line, int column, String operator, ExpressionNode operand) {
+        super(line, column);
+        this.operator = operator;
+        this.operand = operand;
+    }
+}
+
 public class GoASTVisitor extends GoParserBaseVisitor<ASTNode> {
     @Override
     public ASTNode visitSourceFile(GoParser.SourceFileContext ctx) {
@@ -398,38 +441,6 @@ public class GoASTVisitor extends GoParserBaseVisitor<ASTNode> {
     }
     
     @Override
-    public ASTNode visitForStmt(GoParser.ForStmtContext ctx) {
-        ForStatementNode forStmt = new ForStatementNode(
-            ctx.getStart().getLine(),
-            ctx.getStart().getCharPositionInLine()
-        );
-        
-        if (ctx.forClause() != null) {
-            // Handle for clause (traditional for loop)
-            GoParser.ForClauseContext forClause = ctx.forClause();
-            if (forClause.initStmt != null) {
-                forStmt.init = (StatementNode) visit(forClause.initStmt);
-            }
-            if (forClause.expression() != null) {
-                forStmt.condition = (ExpressionNode) visit(forClause.expression());
-            }
-            if (forClause.postStmt != null) {
-                forStmt.post = (StatementNode) visit(forClause.postStmt);
-            }
-        } else if (ctx.expression() != null) {
-            // Handle condition-only for loop
-            forStmt.condition = (ExpressionNode) visit(ctx.expression());
-        }
-        
-        // Handle body
-        if (ctx.block() != null) {
-            forStmt.body = (BlockNode) visit(ctx.block());
-        }
-        
-        return forStmt;
-    }
-    
-    @Override
     public ASTNode visitShortVarDecl(GoParser.ShortVarDeclContext ctx) {
         ShortVarDeclNode shortVar = new ShortVarDeclNode(
             ctx.getStart().getLine(),
@@ -452,23 +463,50 @@ public class GoASTVisitor extends GoParserBaseVisitor<ASTNode> {
     @Override
     public ASTNode visitPrimaryExpr(GoParser.PrimaryExprContext ctx) {
         if (ctx.operand() != null && ctx.operand().operandName() != null) {
-            return new IdentifierNode(
-                ctx.getStart().getLine(),
-                ctx.getStart().getCharPositionInLine(),
-                ctx.operand().operandName().getText()
-            );
+            String identifier = ctx.operand().operandName().getText();
+            
+            // Handle basic identifier
+            if (ctx.getChildCount() == 1) {
+                return new IdentifierNode(
+                    ctx.getStart().getLine(),
+                    ctx.getStart().getCharPositionInLine(),
+                    identifier
+                );
+            }
         }
         
         if (ctx.arguments() != null) {
+            // Check if this is a fmt.Print call
+            if (ctx.primaryExpr() != null && ctx.primaryExpr().getText().startsWith("fmt.")) {
+                String printType = ctx.primaryExpr().getText().substring(4); // Remove "fmt."
+                FmtPrintNode fmtPrint = new FmtPrintNode(
+                    ctx.getStart().getLine(),
+                    ctx.getStart().getCharPositionInLine(),
+                    printType
+                );
+                
+                // Add arguments
+                if (ctx.arguments().expressionList() != null) {
+                    for (var expr : ctx.arguments().expressionList().expression()) {
+                        fmtPrint.arguments.add((ExpressionNode) visit(expr));
+                    }
+                }
+                
+                return new ExpressionStatementNode(
+                    ctx.getStart().getLine(),
+                    ctx.getStart().getCharPositionInLine(),
+                    fmtPrint
+                );
+            }
+            
+            // Handle other function calls
             CallExpressionNode call = new CallExpressionNode(
                 ctx.getStart().getLine(),
                 ctx.getStart().getCharPositionInLine()
             );
             
-            // Set the function being called
             call.function = (ExpressionNode) visit(ctx.primaryExpr());
             
-            // Add arguments
             if (ctx.arguments().expressionList() != null) {
                 for (var expr : ctx.arguments().expressionList().expression()) {
                     call.arguments.add((ExpressionNode) visit(expr));
@@ -479,5 +517,66 @@ public class GoASTVisitor extends GoParserBaseVisitor<ASTNode> {
         }
         
         return super.visitPrimaryExpr(ctx);
+    }
+    
+    public ASTNode visitForStmt(GoParser.ForStmtContext ctx) {
+        ForStatementNode forStmt = new ForStatementNode(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine()
+        );
+        
+        if (ctx.forClause() != null) {
+            // Handle for clause (traditional for loop)
+            GoParser.ForClauseContext forClause = ctx.forClause();
+            if (forClause.initStmt != null) {
+                forStmt.init = (StatementNode) visit(forClause.initStmt);
+            }
+            if (forClause.expression() != null) {
+                forStmt.condition = (ExpressionNode) visit(forClause.expression());
+            }
+            if (forClause.postStmt != null) {
+                // Handle post statement which might be increment/decrement
+                ASTNode postNode = visit(forClause.postStmt);
+                if (postNode instanceof ExpressionNode) {
+                    forStmt.post = new ExpressionStatementNode(
+                        forClause.postStmt.getStart().getLine(),
+                        forClause.postStmt.getStart().getCharPositionInLine(),
+                        (ExpressionNode) postNode
+                    );
+                } else if (postNode instanceof StatementNode) {
+                    forStmt.post = (StatementNode) postNode;
+                }
+            }
+        } else if (ctx.expression() != null) {
+            // Handle condition-only for loop
+            forStmt.condition = (ExpressionNode) visit(ctx.expression());
+        }
+        
+        // Handle body
+        if (ctx.block() != null) {
+            forStmt.body = (BlockNode) visit(ctx.block());
+        }
+        
+        return forStmt;
+    }
+    
+    @Override
+    public ASTNode visitIncDecStmt(GoParser.IncDecStmtContext ctx) {
+        ExpressionNode operand = (ExpressionNode) visit(ctx.expression());
+        String operator = ctx.getChild(1).getText(); // Get "++" or "--"
+        
+        IncDecExpressionNode incDec = new IncDecExpressionNode(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            operator,
+            operand
+        );
+        
+        // Wrap in ExpressionStatementNode since this is a statement
+        return new ExpressionStatementNode(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            incDec
+        );
     }
 }
