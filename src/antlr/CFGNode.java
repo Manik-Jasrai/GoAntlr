@@ -1,22 +1,34 @@
 package antlr;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 class CFGNode {
-    private static int nextId = 0;
+    private static int nextId = 1;
     int id;
     String label;
     List<CFGNode> successors;
     List<CFGNode> predecessors;
 
+    // Attributes for dominance calculations
+    Set<CFGNode> domSet;      // Dominance Set
+    Set<CFGNode> sDomSet;     // Strict Dominance Set
+    Set<CFGNode> DFSet;       // Dominance Frontier Set
+    CFGNode iDom;             // Immediate Dominator
+
     public CFGNode(String label) {
-        this.id = nextId++;
+        this(nextId++, label);
+    }
+
+    public CFGNode(int id, String label) {
+        this.id = id;
         this.label = label;
         this.successors = new ArrayList<>();
         this.predecessors = new ArrayList<>();
+
+        // Initialize sets for dominance calculations
+        this.domSet = new HashSet<>();
+        this.sDomSet = new HashSet<>();
+        this.DFSet = new HashSet<>();
+        this.iDom = null;
     }
 
     public void addSuccessor(CFGNode node) {
@@ -26,9 +38,19 @@ class CFGNode {
         }
     }
 
+    // Getter for successors
+    public Set<CFGNode> getNext() {
+        return new HashSet<>(successors);
+    }
+
+    // Getter for predecessors
+    public Set<CFGNode> getParent() {
+        return new HashSet<>(predecessors);
+    }
+
     @Override
     public String toString() {
-        return "Node_" + id + "[" + label + "]";
+        return String.valueOf(id);
     }
 }
 
@@ -186,3 +208,4 @@ class CFGBuilder {
         }
     }
 }
+
