@@ -52,6 +52,25 @@ class CFGNode {
     public String toString() {
         return String.valueOf(id);
     }
+    
+    public List<CFGNode> getPostOrder() {
+        List<CFGNode> postOrder = new ArrayList<>();
+        Set<CFGNode> visited = new HashSet<>();
+        dfsPostOrder(this, postOrder, visited);
+        return postOrder;
+    }
+
+    private void dfsPostOrder(CFGNode node, List<CFGNode> postOrder, Set<CFGNode> visited) {
+        visited.add(node);
+
+        for (CFGNode successor : node.getNext()) {
+            if (!visited.contains(successor)) {
+                dfsPostOrder(successor, postOrder, visited);
+            }
+        }
+
+        postOrder.add(node);
+    }
 }
 
 class CFGBuilder {

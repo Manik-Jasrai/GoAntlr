@@ -3,103 +3,112 @@ package antlr;
 import java.util.*;
 
 public class CFGAnalyzer {
+	
+	public static void calculateDominators(CFGNode root) {
+		calculateDominatorSets(root);
+		calculateStrictDominanceAndDominanceFrontier(root);
+		calculateImmediateDominators(root);
+	}
     
     // Method to compute the dominance set for each node
-    public Map<CFGNode, Set<CFGNode>> computeDominanceSet(Set<CFGNode> nodes, CFGNode entryNode) {
-        Map<CFGNode, Set<CFGNode>> dominanceSet = new HashMap<>();
-        
-        // Initialize dominance sets
-        for (CFGNode node : nodes) {
-            if (node == entryNode) {
-                dominanceSet.put(node, new HashSet<>(Collections.singletonList(node)));
-            } else {
-                dominanceSet.put(node, new HashSet<>(nodes));
-            }
-        }
+	public static void calculateDominatorSets(CFGNode root) {
+	    // Step 1: Initialize the dominator sets
+	    initializeDominatorSets(root);
 
-        boolean changed;
-        do {
-            changed = false;
-            for (CFGNode node : nodes) {
-                if (node == entryNode) continue;
+	    // Step 2: Perform iterative dataflow analysis
+	    boolean changed;
+	    do {
+	        changed = false;
+	        for (CFGNode node : root.getPostOrder()) {
+	            if (node == root) continue; // Skip the root node as it only dominates itself
 
-                Set<CFGNode> newDomSet = new HashSet<>(nodes);
-                for (CFGNode pred : node.getParent()) {
-                    newDomSet.retainAll(dominanceSet.get(pred));
-                }
-                newDomSet.add(node);
+	            Set<CFGNode> newDomSet = new HashSet<>(node.getParent().iterator().next().domSet);
+	            for (CFGNode predecessor : node.getParent()) {
+	                newDomSet.retainAll(predecessor.domSet);
+	            }
 
-                if (!newDomSet.equals(dominanceSet.get(node))) {
-                    dominanceSet.put(node, newDomSet);
-                    changed = true;
-                }
-            }
-        } while (changed);
+	            // Add the node to its own dominator set
+	            newDomSet.add(node);
 
-        return dominanceSet;
-    }
+	            // Check if there is any change in the dominator set
+	            if (!newDomSet.equals(node.domSet)) {
+	                node.domSet = newDomSet;
+	                changed = true;
+	            }
+	        }
+	    } while (changed);
+	}
 
-    // Method to compute the strict dominance set
-    public Map<CFGNode, Set<CFGNode>> computeStrictDominanceSet(Map<CFGNode, Set<CFGNode>> dominanceSet) {
-        Map<CFGNode, Set<CFGNode>> strictDomSet = new HashMap<>();
+	private static void initializeDominatorSets(CFGNode root) {
+	    List<CFGNode> postOrder = root.getPostOrder();
+	    for (CFGNode node : postOrder) {
+	        if (node == root) {
+	            node.domSet.add(root);
+	        } else {
+	            node.domSet.addAll(postOrder);
+	        }
+	    }
+	}
 
-        for (Map.Entry<CFGNode, Set<CFGNode>> entry : dominanceSet.entrySet()) {
-            Set<CFGNode> strictDom = new HashSet<>(entry.getValue());
-            strictDom.remove(entry.getKey());
-            strictDomSet.put(entry.getKey(), strictDom);
-        }
 
-        return strictDomSet;
-    }
 
-    // Method to compute the immediate dominator
-    public Map<CFGNode, CFGNode> computeImmediateDominator(Map<CFGNode, Set<CFGNode>> dominanceSet) {
-        Map<CFGNode, CFGNode> immediateDominator = new HashMap<>();
+	private static void calculateStrictDominanceAndDominanceFrontier(CFGNode root) {
+	    // Calculate strict dominance and dominance frontier for each node
+	    for (CFGNode node : root.getPostOrder()) {
+	        // Calculate strict dominance set (sDomSet)
+	        node.sDomSet.addAll(node.domSet);
+	        node.sDomSet.remove(node);
 
-        for (CFGNode node : dominanceSet.keySet()) {
-            if (dominanceSet.get(node).size() > 1) {
-                Set<CFGNode> strictDominators = new HashSet<>(dominanceSet.get(node));
-                strictDominators.remove(node);
+	        // Calculate dominance frontier set (DFSet)
+	        for (CFGNode successor : node.getNext()) {
+	            // Case 1: Successor is not dominated by node, add to DFSet
+	            if (!node.domSet.contains(successor)) {
+	                node.DFSet.add(successor);
+	            } else {
+	                // Case 2: Successor is dominated by node
+	                // Look for nodes in successor's dominance frontier
+	                for (CFGNode frontierNode : successor.DFSet) {
+	                    if (!node.domSet.contains(frontierNode)) {
+	                        node.DFSet.add(frontierNode);
+	                    }
+	                }
+	            }
+	        }
+	    }
+	}
 
-                CFGNode iDom = null;
-                for (CFGNode domNode : strictDominators) {
-                    if (strictDominators.containsAll(dominanceSet.get(domNode))) {
-                        iDom = domNode;
-                    }
-                }
-                immediateDominator.put(node, iDom);
-            }
-        }
+	private static void calculateImmediateDominators(CFGNode root) {
+	    // Calculate immediate dominators (iDom) for each node
+	    for (CFGNode node : root.getPostOrder()) {
+	        if (node == root) {
+	            node.iDom = null; // Root has no immediate dominator
+	        } else {
+	            CFGNode immediateDominator = null;
+	            for (CFGNode predecessor : node.getParent()) {
+	                if (node.domSet.contains(predecessor)) {
+	                    if (immediateDominator == null) {
+	                        immediateDominator = predecessor;
+	                    } else {
+	                        // Find the intersection of dominator paths to find closest dominator
+	                        Set<CFGNode> intersection = new HashSet<>(immediateDominator.domSet);
+	                        intersection.retainAll(predecessor.domSet);
+	                        immediateDominator = findClosestNode(intersection, node);
+	                    }
+	                }
+	            }
+	            node.iDom = immediateDominator;
+	        }
+	    }
+	}
 
-        return immediateDominator;
-    }
+	// Helper method to find the closest node to 'node' from a set of candidates
+	private static CFGNode findClosestNode(Set<CFGNode> candidates, CFGNode node) {
+	    for (CFGNode candidate : node.getPostOrder()) {
+	        if (candidates.contains(candidate)) {
+	            return candidate;
+	        }
+	    }
+	    return null;
+	}
 
-    // Method to compute dominance frontier
-    public Map<CFGNode, Set<CFGNode>> computeDominanceFrontier(Set<CFGNode> nodes, Map<CFGNode, CFGNode> immediateDominator) {
-        Map<CFGNode, Set<CFGNode>> dominanceFrontier = new HashMap<>();
-
-        for (CFGNode node : nodes) {
-            Set<CFGNode> dfSet = new HashSet<>();
-
-            for (CFGNode succ : node.getNext()) {
-                if (immediateDominator.get(succ) != node) {
-                    dfSet.add(succ);
-                }
-            }
-
-            for (CFGNode child : nodes) {
-                if (immediateDominator.get(child) == node) {
-                    for (CFGNode frontierNode : dominanceFrontier.getOrDefault(child, new HashSet<>())) {
-                        if (immediateDominator.get(frontierNode) != node) {
-                            dfSet.add(frontierNode);
-                        }
-                    }
-                }
-            }
-
-            dominanceFrontier.put(node, dfSet);
-        }
-
-        return dominanceFrontier;
-    }
 }
