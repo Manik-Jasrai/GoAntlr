@@ -82,6 +82,15 @@ class ExpressionStatementNode extends StatementNode {
         this.expression = expression;
     }
 }
+class CaseClauseNode extends ASTNode {
+    List<ExpressionNode> expressions;
+    BlockNode body;
+
+    public CaseClauseNode(int line, int column) {
+        super(line, column);
+        this.expressions = new ArrayList<>();
+    }
+}
 
 class CallExpressionNode extends ExpressionNode {
     ExpressionNode function;
@@ -178,6 +187,18 @@ class BinaryExpressionNode extends ExpressionNode {
     }
 }
 
+class SwitchStatementNode extends StatementNode {
+    StatementNode init;
+    ExpressionNode condition;
+    List<CaseClauseNode> cases;
+
+    public SwitchStatementNode(int line, int column) {
+        super(line, column);
+        this.cases = new ArrayList<>();
+    }
+}
+
+
 class LiteralNode extends ExpressionNode {
     Object value;
     
@@ -198,7 +219,25 @@ class FmtPrintNode extends ExpressionNode {
      this.printType = printType;
  }
 }
+class SelectStatementNode extends StatementNode {
+    List<CommClauseNode> commClauses;
 
+    public SelectStatementNode(int line, int column) {
+        super(line, column);
+        this.commClauses = new ArrayList<>();
+    }
+}
+
+class CommClauseNode extends ASTNode {
+    StatementNode comm; 
+    BlockNode body;
+    boolean isDefault;
+
+    public CommClauseNode(int line, int column) {
+        super(line, column);
+        this.isDefault = false;
+    }
+}
 class UnaryExpressionNode extends ExpressionNode {
  String operator;
  ExpressionNode operand;
@@ -579,4 +618,276 @@ public class GoASTVisitor extends GoParserBaseVisitor<ASTNode> {
             incDec
         );
     }
+    @Override
+    public ASTNode visitReturnStmt(GoParser.ReturnStmtContext ctx) {
+        class ReturnStatementNode extends StatementNode {
+            List<ExpressionNode> returnValues;
+            
+            public ReturnStatementNode(int line, int column) {
+                super(line, column);
+                this.returnValues = new ArrayList<>();
+            }
+        }
+        
+        ReturnStatementNode returnStmt = new ReturnStatementNode(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine()
+        );
+        
+        if (ctx.expressionList() != null) {
+            for (GoParser.ExpressionContext expr : ctx.expressionList().expression()) {
+                returnStmt.returnValues.add((ExpressionNode) visit(expr));
+            }
+        }
+        
+        return returnStmt;
+    }
+
+    @Override
+    public ASTNode visitAssignment(GoParser.AssignmentContext ctx) {
+        class AssignmentNode extends StatementNode {
+            List<ExpressionNode> leftSide;
+            List<ExpressionNode> rightSide;
+            String operator; // =, +=, -=, etc.
+            
+            public AssignmentNode(int line, int column) {
+                super(line, column);
+                this.leftSide = new ArrayList<>();
+                this.rightSide = new ArrayList<>();
+            }
+        }
+        
+        AssignmentNode assignment = new AssignmentNode(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine()
+        );
+        
+        assignment.operator = ctx.assign_op().getText();
+        
+        // Handle left side expressions
+        for (GoParser.ExpressionContext expr : ctx.expressionList(0).expression()) {
+            assignment.leftSide.add((ExpressionNode) visit(expr));
+        }
+        
+        // Handle right side expressions
+        for (GoParser.ExpressionContext expr : ctx.expressionList(1).expression()) {
+            assignment.rightSide.add((ExpressionNode) visit(expr));
+        }
+        
+        return assignment;
+    }
+
+    @Override
+    public ASTNode visitSwitchStmt(GoParser.SwitchStmtContext ctx) {
+        SwitchStatementNode switchStmt = new SwitchStatementNode(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine()
+        );
+
+        // Handle init statement if present
+        if (ctx.exprSwitchStmt().simpleStmt() != null) {
+            switchStmt.init = (StatementNode) visit(ctx.exprSwitchStmt().simpleStmt());
+        }
+
+        // Handle switch expression if present
+        if (ctx.exprSwitchStmt().expression() != null) {
+            switchStmt.condition = (ExpressionNode) visit(ctx.exprSwitchStmt().expression());
+        }
+
+        // Handle case clauses
+        if (ctx.exprSwitchStmt() != null && ctx.exprSwitchStmt().exprCaseClause() != null) {
+            for (GoParser.ExprCaseClauseContext caseCtx : ctx.exprSwitchStmt().exprCaseClause()) {
+                CaseClauseNode caseNode = new CaseClauseNode(
+                    caseCtx.getStart().getLine(),
+                    caseCtx.getStart().getCharPositionInLine()
+                );
+
+                // Handle case expressions
+                if (caseCtx.exprSwitchCase().CASE() != null) {
+                    for (GoParser.ExpressionContext expr : caseCtx.exprSwitchCase().expressionList().expression()) {
+                        caseNode.expressions.add((ExpressionNode) visit(expr));
+                    }
+                }
+
+                // Handle case body
+                if (caseCtx.statementList() != null) {
+                    BlockNode body = new BlockNode(
+                        caseCtx.statementList().getStart().getLine(),
+                        caseCtx.statementList().getStart().getCharPositionInLine()
+                    );
+                    for (GoParser.StatementContext stmt : caseCtx.statementList().statement()) {
+                        ASTNode node = visit(stmt);
+                        if (node instanceof StatementNode) {
+                            body.statements.add((StatementNode) node);
+                        }
+                    }
+                    caseNode.body = body;
+                }
+
+                // Add caseNode to the cases list in switchStmt
+                switchStmt.cases.add(caseNode);
+            }
+        }
+
+        return switchStmt;
+    }
+
+
+    @Override
+    public ASTNode visitRangeClause(GoParser.RangeClauseContext ctx) {
+        class RangeClauseNode extends StatementNode {
+            List<ExpressionNode> variables;
+            ExpressionNode rangeExpression;
+            
+            public RangeClauseNode(int line, int column) {
+                super(line, column);
+                this.variables = new ArrayList<>();
+            }
+        }
+        
+        RangeClauseNode rangeClause = new RangeClauseNode(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine()
+        );
+        
+        // Handle range variables
+        if (ctx.identifierList() != null) {
+            for (var id : ctx.identifierList().IDENTIFIER()) {
+                rangeClause.variables.add(new IdentifierNode(
+                    id.getSymbol().getLine(),
+                    id.getSymbol().getCharPositionInLine(),
+                    id.getText()
+                ));
+            }
+        }
+        
+        // Handle range expression
+        if (ctx.expression() != null) {
+            rangeClause.rangeExpression = (ExpressionNode) visit(ctx.expression());
+        }
+        
+        return rangeClause;
+    }
+
+    @Override
+    public ASTNode visitBreakStmt(GoParser.BreakStmtContext ctx) {
+        class BreakStatementNode extends StatementNode {
+            String label; // Optional label
+            
+            public BreakStatementNode(int line, int column, String label) {
+                super(line, column);
+                this.label = label;
+            }
+        }
+        
+        String label = ctx.IDENTIFIER() != null ? ctx.IDENTIFIER().getText() : null;
+        return new BreakStatementNode(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            label
+        );
+    }
+
+    @Override
+    public ASTNode visitContinueStmt(GoParser.ContinueStmtContext ctx) {
+        class ContinueStatementNode extends StatementNode {
+            String label; // Optional label
+            
+            public ContinueStatementNode(int line, int column, String label) {
+                super(line, column);
+                this.label = label;
+            }
+        }
+        
+        String label = ctx.IDENTIFIER() != null ? ctx.IDENTIFIER().getText() : null;
+        return new ContinueStatementNode(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            label
+        );
+    }
+
+    @Override
+    public ASTNode visitDeferStmt(GoParser.DeferStmtContext ctx) {
+        class DeferStatementNode extends StatementNode {
+            ExpressionNode expression;
+            
+            public DeferStatementNode(int line, int column, ExpressionNode expression) {
+                super(line, column);
+                this.expression = expression;
+            }
+        }
+        
+        return new DeferStatementNode(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            (ExpressionNode) visit(ctx.expression())
+        );
+    }
+
+    @Override
+    public ASTNode visitGoStmt(GoParser.GoStmtContext ctx) {
+        class GoStatementNode extends StatementNode {
+            ExpressionNode expression;
+            
+            public GoStatementNode(int line, int column, ExpressionNode expression) {
+                super(line, column);
+                this.expression = expression;
+            }
+        }
+        
+        return new GoStatementNode(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine(),
+            (ExpressionNode) visit(ctx.expression())
+        );
+    }
+
+    @Override
+    public ASTNode visitSelectStmt(GoParser.SelectStmtContext ctx) {
+        SelectStatementNode selectStmt = new SelectStatementNode(
+            ctx.getStart().getLine(),
+            ctx.getStart().getCharPositionInLine()
+        );
+
+        // Handle communication clauses
+        for (GoParser.CommClauseContext clauseCtx : ctx.commClause()) {
+            CommClauseNode commClause = new CommClauseNode(
+                clauseCtx.getStart().getLine(),
+                clauseCtx.getStart().getCharPositionInLine()
+            );
+
+            // Check if it's a default clause
+            if (clauseCtx.commCase().DEFAULT() != null) {
+                commClause.isDefault = true;
+            } else if (clauseCtx.commCase().sendStmt() != null) {
+                // Handle send statement
+                commClause.comm = (StatementNode) visit(clauseCtx.commCase().sendStmt());
+            } else if (clauseCtx.commCase().recvStmt() != null) {
+                // Handle receive statement
+                commClause.comm = (StatementNode) visit(clauseCtx.commCase().recvStmt());
+            }
+
+            // Handle clause body
+            if (clauseCtx.statementList() != null) {
+                BlockNode body = new BlockNode(
+                    clauseCtx.statementList().getStart().getLine(),
+                    clauseCtx.statementList().getStart().getCharPositionInLine()
+                );
+                for (GoParser.StatementContext stmt : clauseCtx.statementList().statement()) {
+                    ASTNode node = visit(stmt);
+                    if (node instanceof StatementNode) {
+                        body.statements.add((StatementNode) node);
+                    }
+                }
+                commClause.body = body;
+            }
+
+            selectStmt.commClauses.add(commClause);
+        }
+
+        return selectStmt;
+    }
+
 }
+

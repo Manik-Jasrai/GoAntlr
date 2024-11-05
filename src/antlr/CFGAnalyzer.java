@@ -58,7 +58,6 @@ public class CFGAnalyzer {
             node.sDomSet.addAll(node.domSet);
             node.sDomSet.remove(node);
         }
-
         // Calculate dominance frontier set
         
         for(CFGNode node : postOrder) {// for each Node N
