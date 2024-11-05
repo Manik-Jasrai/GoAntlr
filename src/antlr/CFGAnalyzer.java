@@ -61,16 +61,17 @@ public class CFGAnalyzer {
 
 	        // Calculate dominance frontier set (DFSet)
 	        for (CFGNode successor : node.getNext()) {
-	            // Case 1: Successor is not dominated by node, add to DFSet
-	            if (!node.domSet.contains(successor)) {
-	                node.DFSet.add(successor);
-	            } else {
-	                // Case 2: Successor is dominated by node
-	                // Look for nodes in successor's dominance frontier
-	                for (CFGNode frontierNode : successor.DFSet) {
-	                    if (!node.domSet.contains(frontierNode)) {
-	                        node.DFSet.add(frontierNode);
-	                    }
+	            // Only consider nodes with multiple predecessors
+	            if (successor.getParent().size() < 2) {
+	                continue;
+	            }
+
+	            // For each predecessor of the successor
+	            for (CFGNode predecessor : successor.getParent()) {
+	                // Check if `node` dominates `predecessor` but does not strictly dominate `successor`
+	                if (node.domSet.contains(predecessor) && !node.sDomSet.contains(successor)) {
+	                    node.DFSet.add(successor);
+	                    break;  // Exit after adding the successor to avoid redundant entries
 	                }
 	            }
 	        }
