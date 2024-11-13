@@ -9,7 +9,7 @@ import javax.swing.SwingUtilities;
 
 public class GoASTMain {
     public static void main(String[] args) throws IOException {
-    	CharStream input = CharStreams.fromFileName("/Users/karandeepsingh/git/GoAntlr/src/tests/ex.go");
+    	CharStream input = CharStreams.fromFileName("D:\\Mini-Project\\GoAntlr\\src\\tests\\ex.go");
         // Create lexer and parser
         GoLexer lexer = new GoLexer(input);
         CommonTokenStream tokens = new CommonTokenStream(lexer);
@@ -30,7 +30,8 @@ public class GoASTMain {
     private static void generateAndPrintCFG(ASTNode ast) {
         CFGBuilder builder = new CFGBuilder();
         CFGNode cfg = builder.build(ast);
-        CFGAnalyzer.calculateDominators(cfg);
+        CFGAnalyzer analyzer = new CFGAnalyzer(cfg);
+        analyzer.calculateDominators(cfg);
         
         // Create and show the GUI
         SwingUtilities.invokeLater(() -> {

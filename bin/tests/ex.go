@@ -8,6 +8,7 @@ func main() {
 	
 	if number % 2 == 0 {
 		fmt.Println("Test")
+		a := 3
 	} else {
 		fmt.Println("Test")
 	}
