@@ -269,6 +269,27 @@ class IncDecExpressionNode extends ExpressionNode {
     }
 }
 
+//Represents a log fatal statement node in the AST
+class LogFatalStatementNode extends StatementNode {
+ ExpressionNode message; // The fatal log message
+
+ public LogFatalStatementNode(int line, int column, ExpressionNode message) {
+     super(line, column);
+     this.message = message;
+}
+}
+class AssignmentNode extends StatementNode {
+    List<ExpressionNode> leftSide;
+    List<ExpressionNode> rightSide;
+    String operator; // =, +=, -=, etc.
+    
+    public AssignmentNode(int line, int column) {
+        super(line, column);
+        this.leftSide = new ArrayList<>();
+        this.rightSide = new ArrayList<>();
+    }
+}
+
 public class GoASTVisitor extends GoParserBaseVisitor<ASTNode> {
     @Override
     public ASTNode visitSourceFile(GoParser.SourceFileContext ctx) {
@@ -645,17 +666,7 @@ public class GoASTVisitor extends GoParserBaseVisitor<ASTNode> {
 
     @Override
     public ASTNode visitAssignment(GoParser.AssignmentContext ctx) {
-        class AssignmentNode extends StatementNode {
-            List<ExpressionNode> leftSide;
-            List<ExpressionNode> rightSide;
-            String operator; // =, +=, -=, etc.
-            
-            public AssignmentNode(int line, int column) {
-                super(line, column);
-                this.leftSide = new ArrayList<>();
-                this.rightSide = new ArrayList<>();
-            }
-        }
+        
         
         AssignmentNode assignment = new AssignmentNode(
             ctx.getStart().getLine(),

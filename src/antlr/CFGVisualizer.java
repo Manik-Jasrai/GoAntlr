@@ -1,4 +1,3 @@
-
 package antlr;
 
 import javax.swing.*;
@@ -44,6 +43,7 @@ class NodeAttributesDialog extends JDialog {
         sb.append("Node ID: ").append(node.id).append("\n");
         sb.append("Label: ").append(node.label).append("\n");
         sb.append("Variable Name: ").append(node.varName.isEmpty() ? "none" : node.varName).append("\n");
+        sb.append("Variable Versions: ").append(formatVarVersions(node.varVersions)).append("\n");
         
         sb.append("Successors: ").append(formatNodeSet(node.successors)).append("\n");
         sb.append("Predecessors: ").append(formatNodeSet(node.predecessors)).append("\n");
@@ -73,6 +73,17 @@ class NodeAttributesDialog extends JDialog {
         return nodes.stream()
             .map(n -> String.valueOf(n.id))
             .reduce("", (a, b) -> a.isEmpty() ? b : a + ", " + b);
+    }
+    
+    private String formatVarVersions(Map<String, Integer> varVersions) {
+        if (varVersions == null || varVersions.isEmpty()) return "[]";
+        StringBuilder sb = new StringBuilder();
+        varVersions.forEach((var, version) -> {
+            sb.append(var).append(" v").append(version).append(", ");
+        });
+        // Remove the trailing comma and space
+        if (sb.length() > 0) sb.setLength(sb.length() - 2);
+        return sb.toString();
     }
     
     private String formatStringSet(Set<String> set) {

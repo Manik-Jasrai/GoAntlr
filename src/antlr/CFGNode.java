@@ -8,24 +8,46 @@ class CFGNode {
     List<CFGNode> successors;
     List<CFGNode> predecessors;
     String varName;
-    // Attributes for dominance calculations
     Set<CFGNode> domSet;      
     Set<CFGNode> sDomSet;     
     Set<CFGNode> DFSet;       
-    CFGNode iDom;             
-
+    CFGNode iDom;       
+    Map<String, Integer> varVersions; // This map will now store versions without 'v' prefix
+ // Add to CFGNode class:
+    public Map<String, Map<CFGNode, Integer>> phiOperands = new HashMap<>();
+    Set<String> varUses;     // Variables used in this node
+    Set<String> definitions; // Variables defined in this node
+    Set<CFGNode> dominatedNodes; // Nodes dominated by this node, including successors
+    
     public CFGNode(String label, String varName) {
         this.id = nextId++;
         this.label = label;
-        this.varName = varName != null ? varName : ""; // Set varName if provided, otherwise leave empty
+        this.varName = varName != null ? varName : "";
         this.successors = new ArrayList<>();
         this.predecessors = new ArrayList<>();
         this.domSet = new HashSet<>();
         this.sDomSet = new HashSet<>();
         this.DFSet = new HashSet<>();
+        this.dominatedNodes = new HashSet<>();  // Initialize the new field
         this.iDom = null;
+        this.varVersions = new HashMap<>();
     }
-
+    
+    // Updated method to store version without 'v' prefix
+    public void updateVarVersion(String var, int version) {
+        varVersions.put(var, version); // Store just the number
+    }
+    
+    // Updated method to get version without 'v' prefix
+    public int getVarVersion(String var) {
+        return varVersions.getOrDefault(var, 0);
+    }
+    
+    // If you need to get the full versioned name for a variable
+    public String getVersionedVarName(String var) {
+        int version = getVarVersion(var);
+        return var + version; // Returns format: "varname0" instead of "varnamev0"
+    }
     // Add a static method to reset the ID counter that returns the previous value
     public static int resetIdCounter() {
         int oldValue = nextId;
@@ -77,8 +99,9 @@ class CFGBuilder {
     private CFGNode exit;
     private Map<CFGNode, ASTNode> nodeToAst;
     private final int graphId;  // Graph identifier
-
+    private Map<String, Integer> ssaCounter; // Track SSA versions per variable
     public CFGBuilder() {
+    	this.ssaCounter = new HashMap<>(); // Initialize the SSA version counters
         this.nodeToAst = new HashMap<>();
         this.graphId = CFGNode.resetIdCounter(); // Reset the node counter
     }
@@ -246,13 +269,16 @@ class CFGBuilder {
         return forInitNode;
     }
 
-    // Updated method to set varName for declaration nodes
     private CFGNode buildFromStatement(StatementNode stmt) {
         if (stmt instanceof IfStatementNode) {
             return buildFromIf((IfStatementNode) stmt);
         } else if (stmt instanceof ForStatementNode) {
             return buildFromFor((ForStatementNode) stmt);
-        } else if (stmt instanceof ExpressionStatementNode) {
+        } else if (stmt instanceof AssignmentNode) {
+            return handleAssignmentNode((AssignmentNode) stmt);
+        }
+
+        else if (stmt instanceof ExpressionStatementNode) {
             ExpressionStatementNode exprStmt = (ExpressionStatementNode) stmt;
             if (exprStmt.expression instanceof FmtPrintNode) {
                 return new CFGNode("PRINT", null);
@@ -261,11 +287,51 @@ class CFGBuilder {
         } else if (stmt instanceof ShortVarDeclNode) {
             ShortVarDeclNode varDecl = (ShortVarDeclNode) stmt;
             String varNames = String.join(", ", varDecl.names); // Join all variable names as a single string
-            return new CFGNode("VAR_DECL", varNames);
-        }
-        
+            CFGNode declNode = new CFGNode("VAR_DECL", varNames);
+            
+            // Update SSA version for each variable declared
+            for (String var : varDecl.names) {
+                int version = ssaCounter.getOrDefault(var, 0);
+                ssaCounter.put(var, version + 1);
+                declNode.updateVarVersion(var, version);
+            }
+            return declNode;
+        } 
+     
         return new CFGNode("UNKNOWN_STMT", null);
     }
+    private CFGNode handleAssignmentNode(AssignmentNode assignmentNode) {
+        // Extract variables from the left-hand side (LHS) of the assignment
+        List<String> assignedVars = extractAssignedVars(assignmentNode.leftSide);
+        CFGNode assignmentCFGNode = new CFGNode("ASSIGNMENT", String.join(", ", assignedVars));
+
+        // Update SSA versions for each variable in the assignment
+        for (String var : assignedVars) {
+            int currentVersion = ssaCounter.getOrDefault(var, 0);
+            int newVersion = currentVersion + 1; // Increment SSA version
+            ssaCounter.put(var, newVersion);
+            assignmentCFGNode.updateVarVersion(var, newVersion); // Track the updated version in the CFGNode
+        }
+
+        return assignmentCFGNode;
+    }
+
+    // Helper method to extract assigned variables from the left-hand side
+    private List<String> extractAssignedVars(List<ExpressionNode> leftSide) {
+        List<String> assignedVars = new ArrayList<>();
+
+        // Traverse each LHS expression to extract variable names
+        for (ExpressionNode expr : leftSide) {
+            if (expr instanceof IdentifierNode) {
+                assignedVars.add(((IdentifierNode) expr).name); // Extract variable name
+            } else {
+                throw new IllegalArgumentException("Unsupported LHS expression in assignment.");
+            }
+        }
+
+        return assignedVars;
+    }
+
 
     private CFGNode buildFromIf(IfStatementNode ifStmt) {
         CFGNode conditionNode = new CFGNode("IF_CONDITION", null);
@@ -347,5 +413,121 @@ class CFGBuilder {
             sb.append("    ").append(node.id).append(" --> ").append(successor.id).append("\n");
             generateMermaidNodes(successor, visited, sb);
         }
+    }
+}
+
+class SSAConverter {
+    private CFGNode rootNode;
+    private Map<String, List<CFGNode>> variableDefinitions;
+    Map<CFGNode, Map<String, String>> variableRenamings;
+
+    public SSAConverter(CFGNode root) {
+        if (root == null) {
+            throw new IllegalArgumentException("Root node cannot be null.");
+        }
+        this.rootNode = root;
+        this.variableDefinitions = new HashMap<>();
+        this.variableRenamings = new HashMap<>();
+    }
+
+    public void convertToSSA() {
+        try {
+            // Step 1: Extract variable definitions
+            extractVariableDefinitions(rootNode, new HashSet<>());
+
+            // Step 2: Calculate dominators
+            CFGAnalyzer analyzer = new CFGAnalyzer(rootNode);
+            analyzer.calculateDominators(rootNode);
+
+            // Step 3: Insert φ functions
+            insertPhiFunctions(new HashSet<>());
+
+            // Step 4: Rename variables
+            renameVariables(rootNode, new HashMap<>(), new HashSet<>());
+        } catch (Exception e) {
+            System.err.println("Error during SSA conversion: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void extractVariableDefinitions(CFGNode node, Set<CFGNode> visited) {
+        if (node == null || visited.contains(node)) {
+            return;
+        }
+        visited.add(node);
+
+        if ("VAR_DECL".equals(node.label) && node.varName != null) {
+            variableDefinitions
+                .computeIfAbsent(node.varName, k -> new ArrayList<>())
+                .add(node);
+        }
+
+        for (CFGNode successor : node.successors) {
+            extractVariableDefinitions(successor, visited);
+        }
+    }
+
+    private void insertPhiFunctions(Set<CFGNode> visited) {
+        if (visited.contains(rootNode)) return;
+        visited.add(rootNode);
+
+        for (Map.Entry<String, List<CFGNode>> entry : variableDefinitions.entrySet()) {
+            String varName = entry.getKey();
+            List<CFGNode> defNodes = entry.getValue();
+
+            if (defNodes.size() > 1) {
+                for (CFGNode defNode : defNodes) {
+                    for (CFGNode frontierNode : defNode.DFSet) {
+                        addPhiFunction(frontierNode, varName);
+                    }
+                }
+            }
+        }
+    }
+
+    private void addPhiFunction(CFGNode node, String varName) {
+        if (node == null || varName == null) return;
+        variableRenamings
+            .computeIfAbsent(node, k -> new HashMap<>())
+            .put(varName, varName + "_φ");
+    }
+
+
+    // Rename variables in the CFG recursively
+    private void renameVariables(CFGNode node, Map<String, Integer> currentVersions, Set<CFGNode> visited) {
+        // Base case: If the node is null or already visited, return
+        if (node == null || visited.contains(node)) {
+            return;
+        }
+
+        // Mark the current node as visited
+        visited.add(node);
+
+        // Clone current versions for this node
+        Map<String, Integer> versions = new HashMap<>(currentVersions);
+
+        // Rename variables in the current node
+        Map<String, String> nodeRenamings = variableRenamings.getOrDefault(node, new HashMap<>());
+        for (String varName : nodeRenamings.keySet()) {
+            int newVersion = versions.getOrDefault(varName, 0) + 1;
+            versions.put(varName, newVersion);
+
+            // Update renaming for this node
+            nodeRenamings.put(varName, varName + "_" + newVersion);
+        }
+
+        // Recursively rename variables in successors
+        for (CFGNode successor : node.successors) {
+            renameVariables(successor, versions, visited);
+        }
+    }
+
+
+    // Example helper method to extract variable name from a node (custom logic)
+    private String extractVariableNameFromNode(CFGNode node) {
+        if (node == null) return null;
+
+        // Placeholder for real AST processing logic
+        return node.varName != null ? node.varName : node.label.toLowerCase().replace("_", "");
     }
 }

@@ -10,10 +10,11 @@ public class CFGAnalyzer {
 	}
 	
 	public void calculateDominators(CFGNode root) {
-		calculateDominatorSets(root);
-		calculateStrictDominance(root);
-		calculateImmediateDominators(root);
-		calculateDominanceFrontier(root);
+	    calculateDominatorSets(root);
+	    calculateStrictDominance(root);
+	    calculateImmediateDominators(root);
+	    calculateDominatedNodes();  // Add this line
+	    calculateDominanceFrontier(root);
 	}
     
     // Method to compute the dominance set for each node
@@ -113,4 +114,16 @@ public class CFGAnalyzer {
             }
         }
     }
+    
+    private void calculateDominatedNodes() {
+        for (CFGNode node : postOrder) {
+            node.dominatedNodes.clear();
+            for (CFGNode potentialDominated : postOrder) {
+                if (potentialDominated != node && potentialDominated.domSet.contains(node)) {
+                    node.dominatedNodes.add(potentialDominated);
+                }
+            }
+        }
+    }
+    
 }

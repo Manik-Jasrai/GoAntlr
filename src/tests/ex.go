@@ -2,17 +2,24 @@ package main
 
 import "fmt"
 
-// Main function
 func main() {
-    number := 5
-	
-	if number % 2 == 0 {
-		fmt.Println("Test")
-	} else {
-		fmt.Println("Test")
-	}
-	
-	for i:= 1; i <= 5;i++ {
-		fmt.Println("Test")
-	}
+    a := 4      // Node 1: Initial assignment to `a`
+    b := 2      // Node 1: Initial assignment to `b`
+
+    if a > b {  // Control flow splits here
+        c := a + b  // Node 2: `c` gets a new value (v2)
+        a = c       // Node 3: `a` gets redefined (v3)
+    } else {
+        c := b - a  // Node 2 (alternate path): `c` gets another value
+        a = c * 2   // Node 3 (alternate path): `a` is redefined again
+    }
+
+    // Merge control flow (Node 3): `b` gets its value based on the path taken
+    if a > 10 {
+        b = 1      // One possible value for `b`
+    } else {
+        b = 0      // Another possible value for `b`
+    }
+
+    fmt.Println(a, b) // Final use of `a` and `b`
 }
