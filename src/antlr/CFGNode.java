@@ -7,16 +7,17 @@ class CFGNode {
     String label;
     List<CFGNode> successors;
     List<CFGNode> predecessors;
-
+    String varName;
     // Attributes for dominance calculations
     Set<CFGNode> domSet;      
     Set<CFGNode> sDomSet;     
     Set<CFGNode> DFSet;       
     CFGNode iDom;             
 
-    public CFGNode(String label) {
+    public CFGNode(String label, String varName) {
         this.id = nextId++;
         this.label = label;
+        this.varName = varName != null ? varName : ""; // Set varName if provided, otherwise leave empty
         this.successors = new ArrayList<>();
         this.predecessors = new ArrayList<>();
         this.domSet = new HashSet<>();
@@ -32,6 +33,11 @@ class CFGNode {
         return oldValue;
     }
 
+    @Override
+    public String toString() {
+        return varName.isEmpty() ? String.valueOf(id) : (id + " (" + varName + ")");
+    }
+
     public void addSuccessor(CFGNode node) {
         if (!successors.contains(node)) {
             successors.add(node);
@@ -45,11 +51,6 @@ class CFGNode {
 
     public Set<CFGNode> getParent() {
         return new HashSet<>(predecessors);
-    }
-
-    @Override
-    public String toString() {
-        return String.valueOf(id);
     }
     
     public List<CFGNode> getPostOrder() {
@@ -71,27 +72,19 @@ class CFGNode {
         postOrder.add(node);
     }
 }
-
 class CFGBuilder {
     private CFGNode entry;
     private CFGNode exit;
     private Map<CFGNode, ASTNode> nodeToAst;
-    private final int graphId;  // Add a graph identifier
+    private final int graphId;  // Graph identifier
 
     public CFGBuilder() {
         this.nodeToAst = new HashMap<>();
-        // Reset the node counter and store the graph ID
-        this.graphId = CFGNode.resetIdCounter();
-    }
-
-    // Add a method to get the graph ID
-    public int getGraphId() {
-        return graphId;
+        this.graphId = CFGNode.resetIdCounter(); // Reset the node counter
     }
 
     public CFGNode build(ASTNode ast) {
-        // Reset node counter before building a new CFG
-        CFGNode.resetIdCounter();
+        CFGNode.resetIdCounter(); // Reset node counter before building new CFG
         
         if (ast instanceof ProgramNode) {
             return buildFromProgram((ProgramNode) ast);
@@ -99,13 +92,14 @@ class CFGBuilder {
         return null;
     }
 
+
     private CFGNode buildFromProgram(ProgramNode program) {
-        CFGNode entryNode = new CFGNode("PROGRAM_START");
+        CFGNode entryNode = new CFGNode("PROGRAM_START", null);
         CFGNode currentNode = entryNode;
         CFGNode mainFunctionNode = null;
         
         // Create the program end node
-        CFGNode exitNode = new CFGNode("PROGRAM_END");
+        CFGNode exitNode = new CFGNode("PROGRAM_END", null);
         this.entry = entryNode;
         this.exit = exitNode;
         
@@ -168,7 +162,7 @@ class CFGBuilder {
     }
 
     private CFGNode buildFromFunction(FunctionNode func) {
-        CFGNode entryNode = new CFGNode("FUNCTION_" + func.name);
+        CFGNode entryNode = new CFGNode("FUNCTION_" + func.name, null);
         
         if (func.body != null) {
             CFGNode bodyNode = buildFromBlock(func.body);
@@ -181,7 +175,7 @@ class CFGBuilder {
 
     private CFGNode buildFromBlock(BlockNode block) {
         if (block.statements.isEmpty()) {
-            return new CFGNode("EMPTY_BLOCK");
+            return new CFGNode("EMPTY_BLOCK", null);
         }
 
         CFGNode firstNode = null;
@@ -252,6 +246,7 @@ class CFGBuilder {
         return forInitNode;
     }
 
+    // Updated method to set varName for declaration nodes
     private CFGNode buildFromStatement(StatementNode stmt) {
         if (stmt instanceof IfStatementNode) {
             return buildFromIf((IfStatementNode) stmt);
@@ -260,19 +255,21 @@ class CFGBuilder {
         } else if (stmt instanceof ExpressionStatementNode) {
             ExpressionStatementNode exprStmt = (ExpressionStatementNode) stmt;
             if (exprStmt.expression instanceof FmtPrintNode) {
-                return new CFGNode("PRINT");
+                return new CFGNode("PRINT", null);
             }
-            return new CFGNode("EXPR");
+            return new CFGNode("EXPR", null);
         } else if (stmt instanceof ShortVarDeclNode) {
-            return new CFGNode("VAR_DECL");
+            ShortVarDeclNode varDecl = (ShortVarDeclNode) stmt;
+            String varNames = String.join(", ", varDecl.names); // Join all variable names as a single string
+            return new CFGNode("VAR_DECL", varNames);
         }
         
-        return new CFGNode("UNKNOWN_STMT");
+        return new CFGNode("UNKNOWN_STMT", null);
     }
 
     private CFGNode buildFromIf(IfStatementNode ifStmt) {
-        CFGNode conditionNode = new CFGNode("IF_CONDITION");
-        CFGNode joinNode = new CFGNode("IF_JOIN");
+        CFGNode conditionNode = new CFGNode("IF_CONDITION", null);
+        CFGNode joinNode = new CFGNode("IF_JOIN", null);
         
         CFGNode thenNode = buildFromBlock(ifStmt.thenBlock);
         conditionNode.addSuccessor(thenNode);
@@ -294,10 +291,21 @@ class CFGBuilder {
     }
 
     private CFGNode buildFromFor(ForStatementNode forStmt) {
-        CFGNode initNode = new CFGNode("FOR_INIT");
-        CFGNode conditionNode = new CFGNode("FOR_CONDITION");
-        CFGNode updateNode = new CFGNode("FOR_UPDATE");
-        CFGNode exitNode = new CFGNode("FOR_EXIT");
+        // Handle initialization statement, which may be a variable declaration or an expression
+        CFGNode initNode;
+        if (forStmt.init instanceof ShortVarDeclNode) {
+            ShortVarDeclNode initVarDecl = (ShortVarDeclNode) forStmt.init;
+            String initVarNames = String.join(", ", initVarDecl.names);
+            initNode = new CFGNode("FOR_INIT", initVarNames);
+        } else if (forStmt.init != null) {
+            initNode = buildFromStatement(forStmt.init);
+        } else {
+            initNode = new CFGNode("FOR_INIT", null);
+        }
+
+        CFGNode conditionNode = new CFGNode("FOR_CONDITION", null);
+        CFGNode updateNode = new CFGNode("FOR_UPDATE", null);
+        CFGNode exitNode = new CFGNode("FOR_EXIT", null);
         
         CFGNode bodyNode = buildFromBlock(forStmt.body);
         

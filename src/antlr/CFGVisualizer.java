@@ -43,7 +43,7 @@ class NodeAttributesDialog extends JDialog {
         StringBuilder sb = new StringBuilder();
         sb.append("Node ID: ").append(node.id).append("\n");
         sb.append("Label: ").append(node.label).append("\n");
- 
+        sb.append("Variable Name: ").append(node.varName.isEmpty() ? "none" : node.varName).append("\n");
         
         sb.append("Successors: ").append(formatNodeSet(node.successors)).append("\n");
         sb.append("Predecessors: ").append(formatNodeSet(node.predecessors)).append("\n");
