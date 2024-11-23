@@ -9,7 +9,7 @@ import javax.swing.SwingUtilities;
 public class GoASTMain {
     public static void main(String[] args) throws IOException {
         // Read input Go source file
-        CharStream input = CharStreams.fromFileName("/Users/karandeepsingh/git/GoAntlr/src/tests/ex.go");
+        CharStream input = CharStreams.fromFileName("D:\\Mini-Project\\GoAntlr\\src\\tests\\ex.go");
 
         // Create lexer and parser
         GoLexer lexer = new GoLexer(input);
@@ -83,15 +83,18 @@ public class GoASTMain {
         Queue<CFGNode> queue = new LinkedList<>();
         queue.add(startNode);
 
-        while (!queue.isEmpty()) {
-            CFGNode node = queue.poll();
-            if (!visited.add(node)) continue;
-
-            // Add all variables that are assigned values in this node
-            variables.addAll(node.varVersions.keySet());
-
-            // Add successors to queue
-            queue.addAll(node.successors);
+//        while (!queue.isEmpty()) {
+//            CFGNode node = queue.poll();
+//            if (!visited.add(node)) continue;
+//
+//            // Add all variables that are assigned values in this node
+//            variables.addAll(node.varVersions.keySet());
+//
+//            // Add successors to queue
+//            queue.addAll(node.successors);
+//        }
+        for (CFGNode n: startNode.getPostOrder()) {
+        	variables.addAll(n.varVersions.keySet());
         }
         return variables;
     }
@@ -112,8 +115,10 @@ public class GoASTMain {
                     // If the variable is also defined in the frontier node, we need to
                     // consider its dominance frontier as well (for nested loops)
                     if (defNodes.contains(frontierNode)) {
-                        insertPhiFunctions(startNode, variable, phiNodes, phiFunctions);
+//                        insertPhiFunctions(startNode, variable, phiNodes, phiFunctions);
+                    	defNodes.add(frontierNode);
                     }
+                    
                 }
             }
         }
@@ -121,90 +126,13 @@ public class GoASTMain {
 
     private static Set<CFGNode> getDefinitionNodes(CFGNode startNode, String variable) {
         Set<CFGNode> defNodes = new HashSet<>();
-        Set<CFGNode> visited = new HashSet<>();
-        Queue<CFGNode> queue = new LinkedList<>();
-        queue.add(startNode);
-
-        while (!queue.isEmpty()) {
-            CFGNode node = queue.poll();
-            if (!visited.add(node)) continue;
-
-            // Check if this node defines the variable
-            if (node.varVersions.containsKey(variable)) {
+        for(CFGNode node : startNode.getPostOrder()) {
+        	if (node.varVersions.containsKey(variable)) {
                 defNodes.add(node);
             }
-
-            queue.addAll(node.successors);
         }
         return defNodes;
     }
-
-    private static void renameVariables(CFGNode node, Set<String> variables,
-            Map<String, Stack<Integer>> variableVersions,
-            Map<String, Integer> currentVersion,
-            Map<CFGNode, Set<String>> phiFunctions,
-            Set<CFGNode> visited) {
-  if (node == null || !visited.add(node)) return;
-
-  // Store the stack size for each variable before processing this node
-  Map<String, Integer> stackSizes = new HashMap<>();
-  for (String var : variables) {
-      Stack<Integer> stack = variableVersions.computeIfAbsent(var, k -> new Stack<>());
-      stackSizes.put(var, stack.size());
-  }
-
-  // Process phi functions first
-  if (phiFunctions.containsKey(node)) {
-      for (String var : phiFunctions.get(node)) {
-          int newVersion = getNextVersion(var, variableVersions, currentVersion);
-          node.varVersions.put(var, newVersion);
-      }
-  }
-
-  // Process uses before definitions
-  // Replace uses with the most recent version from the stack
-  for (String var : node.varVersions.keySet()) {
-      Stack<Integer> stack = variableVersions.get(var);
-      if (!stack.isEmpty() && !node.phiOperands.containsKey(var)) {
-          node.varVersions.put(var, stack.peek());
-      }
-  }
-
-  // Process definitions by creating new versions
-  for (String var : node.varVersions.keySet()) {
-      if (variables.contains(var) && !node.phiOperands.containsKey(var)) {
-          int newVersion = getNextVersion(var, variableVersions, currentVersion);
-          node.varVersions.put(var, newVersion);
-      }
-  }
-
-  // Record phi operands for successor nodes before recursing
-  for (CFGNode succ : node.successors) {
-      if (phiFunctions.containsKey(succ)) {
-          for (String var : phiFunctions.get(succ)) {
-              Stack<Integer> stack = variableVersions.get(var);
-              if (!stack.isEmpty()) {
-                  succ.phiOperands.computeIfAbsent(var, k -> new HashMap<>())
-                                .put(node, stack.peek());
-              }
-          }
-      }
-  }
-
-  // Recursively process all children in the dominator tree
-  for (CFGNode child : node.dominatedNodes) {
-      renameVariables(child, variables, variableVersions, currentVersion, phiFunctions, visited);
-  }
-
-  // Pop all versions that were pushed in this node
-  for (String var : variables) {
-      Stack<Integer> stack = variableVersions.get(var);
-      int oldSize = stackSizes.get(var);
-      while (stack.size() > oldSize) {
-          stack.pop();
-      }
-  }
-}
 
 
     private static void printSSAInfo(CFGNode startNode, Map<CFGNode, Set<String>> phiFunctions) {
@@ -250,17 +178,80 @@ public class GoASTMain {
             queue.addAll(node.successors);
         }
     }
+    
+    private static void renameVariables(CFGNode node, Set<String> variables,
+            Map<String, Stack<Integer>> variableVersions,
+            Map<String, Integer> currentVersion,
+            Map<CFGNode, Set<String>> phiFunctions,
+            Set<CFGNode> visited) {
+        if (node == null || !visited.add(node)) return;
+
+        // Store the stack size for each variable before processing this node
+        Map<String, Integer> stackSizes = new HashMap<>();
+        for (String var : variables) {
+            Stack<Integer> stack = variableVersions.computeIfAbsent(var, k -> new Stack<>());
+            stackSizes.put(var, stack.size());
+        }
+
+        // Process phi functions first
+        if (phiFunctions.containsKey(node)) {
+            for (String var : phiFunctions.get(node)) {
+                int newVersion = getNextVersion(var, variableVersions, currentVersion);
+                node.varVersions.put(var, newVersion);
+            }
+        }
+
+        // Process uses before definitions
+        // Replace uses with the most recent version from the stack
+        for (String var : node.varVersions.keySet()) {
+            Stack<Integer> stack = variableVersions.get(var);
+            if (!stack.isEmpty() && !node.phiOperands.containsKey(var)) {
+                node.varVersions.put(var, stack.peek());
+            }
+        }
+
+        // Process definitions by creating new versions
+        for (String var : node.varVersions.keySet()) {
+            if (variables.contains(var) && !node.phiOperands.containsKey(var)) {
+                int newVersion = getNextVersion(var, variableVersions, currentVersion);
+                node.varVersions.put(var, newVersion);
+            }
+        }
+
+        // Record phi operands for successor nodes before recursing
+        for (CFGNode succ : node.successors) {
+            if (phiFunctions.containsKey(succ)) {
+                for (String var : phiFunctions.get(succ)) {
+                    Stack<Integer> stack = variableVersions.get(var);
+                    if (!stack.isEmpty()) {
+                        succ.phiOperands.computeIfAbsent(var, k -> new HashMap<>())
+                                      .put(node, stack.peek());
+                    }
+                }
+            }
+        }
+
+        // Recursively process all children in the dominator tree
+        for (CFGNode child : node.dominatedNodes) {
+            renameVariables(child, variables, variableVersions, currentVersion, phiFunctions, visited);
+        }
+
+        // Pop all versions that were pushed in this node
+        for (String var : variables) {
+            Stack<Integer> stack = variableVersions.get(var);
+            int oldSize = stackSizes.get(var);
+            while (stack.size() > oldSize) {
+                stack.pop();
+            }
+        }
+    }
 
     private static int getNextVersion(String var, Map<String, Stack<Integer>> variableVersions,
-                  Map<String, Integer> currentVersion) {
+                Map<String, Integer> currentVersion) {
         currentVersion.put(var, currentVersion.getOrDefault(var, 0) + 1);
         variableVersions.computeIfAbsent(var, k -> new Stack<>()).push(currentVersion.get(var));
         return currentVersion.get(var);
     }
 
-    private static void restoreVersion(String var, Map<String, Stack<Integer>> variableVersions) {
-        if (variableVersions.containsKey(var) && !variableVersions.get(var).isEmpty()) {
-            variableVersions.get(var).pop();
-        }
-    }
+    
 }

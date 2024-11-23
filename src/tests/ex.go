@@ -7,10 +7,10 @@ func main() {
     b := 2      // Node 1: Initial assignment to `b`
 
     if a > b {  // Control flow splits here
-        c := a + b  // Node 2: `c` gets a new value (v2)
+        //c := a + b  // Node 2: `c` gets a new value (v2)
         a = c       // Node 3: `a` gets redefined (v3)
     } else {
-        c := b - a  // Node 2 (alternate path): `c` gets another value
+        // c := b - a  // Node 2 (alternate path): `c` gets another value
         a = c * 2   // Node 3 (alternate path): `a` is redefined again
     }
 
@@ -20,6 +20,10 @@ func main() {
     } else {
         b = 0      // Another possible value for `b`
     }
+	
+	for i := 0;i<5;i++ {
+		a = b + c
+	}
 
     fmt.Println(a, b) // Final use of `a` and `b`
 }
