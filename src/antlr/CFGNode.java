@@ -224,8 +224,46 @@ class CFGBuilder {
         
         return firstNode;
     }
+    
+    class Blockends {
+    	CFGNode firstNode;
+    	CFGNode lastNode;
+		public Blockends(CFGNode firstNode, CFGNode lastNode) {
+			super();
+			this.firstNode = firstNode;
+			this.lastNode = lastNode;
+		}
+    }
+    private Blockends buildFromBlock2(BlockNode block) {
+        if (block.statements.isEmpty()) {
+            return new Blockends(new CFGNode("EMPTY_BLOCK", null), null);
+        }
 
-    // Rest of the methods remain the same...
+        CFGNode firstNode = null;
+        CFGNode previousNode = null;
+        CFGNode lastNode = null;
+        
+
+        for (StatementNode stmt : block.statements) {
+            CFGNode currentNode = buildFromStatement(stmt);
+            
+            if (firstNode == null) {
+                firstNode = currentNode;
+            }
+            
+            if (previousNode != null) {
+                // Get the last node of the previous statement's subgraph
+                CFGNode previousLastNode = getLastNode(previousNode);
+                previousLastNode.addSuccessor(currentNode);
+            }
+            
+            previousNode = currentNode;
+            lastNode = getLastNode(currentNode);
+        }
+        
+        return new Blockends(firstNode, lastNode);
+    }
+    
     private CFGNode getLastNode(CFGNode node) {
         if (node.label.equals("IF_CONDITION")) {
             return findJoinNode(node);
@@ -331,23 +369,25 @@ class CFGBuilder {
 
         return assignedVars;
     }
-
+    
 
     private CFGNode buildFromIf(IfStatementNode ifStmt) {
         CFGNode conditionNode = new CFGNode("IF_CONDITION", null);
         CFGNode joinNode = new CFGNode("IF_JOIN", null);
         
-        CFGNode thenNode = buildFromBlock(ifStmt.thenBlock);
+        Blockends thenRange = buildFromBlock2(ifStmt.thenBlock);
+        CFGNode thenNode = thenRange.firstNode;
         conditionNode.addSuccessor(thenNode);
         
-        CFGNode thenLastNode = getLastNode(thenNode);
+        CFGNode thenLastNode = thenRange.lastNode;
         thenLastNode.addSuccessor(joinNode);
         
         if (ifStmt.elseBlock != null) {
-            CFGNode elseNode = buildFromBlock(ifStmt.elseBlock);
+        	Blockends elseRange = buildFromBlock2(ifStmt.elseBlock);
+            CFGNode elseNode = elseRange.firstNode;
             conditionNode.addSuccessor(elseNode);
             
-            CFGNode elseLastNode = getLastNode(elseNode);
+            CFGNode elseLastNode = elseRange.lastNode;
             elseLastNode.addSuccessor(joinNode);
         } else {
             conditionNode.addSuccessor(joinNode);
@@ -373,12 +413,13 @@ class CFGBuilder {
         CFGNode updateNode = new CFGNode("FOR_UPDATE", null);
         CFGNode exitNode = new CFGNode("FOR_EXIT", null);
         
-        CFGNode bodyNode = buildFromBlock(forStmt.body);
+        Blockends bodyRange = buildFromBlock2(forStmt.body); 
+        CFGNode bodyNode = bodyRange.firstNode;
         
         initNode.addSuccessor(conditionNode);
         conditionNode.addSuccessor(bodyNode);
         
-        CFGNode bodyLastNode = getLastNode(bodyNode);
+        CFGNode bodyLastNode = bodyRange.lastNode;
         bodyLastNode.addSuccessor(updateNode);
         
         updateNode.addSuccessor(conditionNode);
