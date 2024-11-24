@@ -25,6 +25,14 @@ func main() {
 	for i := 0;i<5;i++ {
 		a = b + c
 		c = b + d
+		
+		if a > 5 {
+			b = 3
+		} else {
+			b = 4
+		}
+		
+		c = b
 	}
 
     fmt.Println(a, b) // Final use of `a` and `b`
