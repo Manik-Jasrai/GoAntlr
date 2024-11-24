@@ -72,7 +72,7 @@ public class GoASTMain {
             variableVersions.computeIfAbsent(var, k -> new Stack<>()).push(0);
         }
 
-        // Step 2: Insert phi functions
+        // Step 2: Insert functions
         for (String variable : assignedVariables) {
             Set<CFGNode> phiNodes = new HashSet<>();
             insertPhiFunctions(startNode, variable, phiNodes, phiFunctions);
@@ -93,7 +93,7 @@ public class GoASTMain {
             Map<String, Integer> nodeVersions = new HashMap<>();
             nodeVarVersions.put(node, nodeVersions);
 
-            // Process phi functions first
+            // Process functions first
             if (phiFunctions.containsKey(node)) {
                 for (String var : phiFunctions.get(node)) {
                     int newVersion = currentVersion.get(var) + 1;
@@ -117,7 +117,7 @@ public class GoASTMain {
                             }
                         }
                     } else {
-                        // Regular phi operands initialization
+                        // Regular operands initialization
                         node.phiOperands.computeIfAbsent(var, k -> new HashMap<>());
                     }
                 }
@@ -197,56 +197,31 @@ public class GoASTMain {
         }
         return variables;
     }
-    private static int findMostRecentVersion(CFGNode node, String var) {
-        // Look for the most recent version in the current node
-        if (node.varVersions.containsKey(var)) {
-            return node.varVersions.get(var);
-        }
-        
-        // If not found, look in predecessors
-        int version = 0;
-        Set<CFGNode> visited = new HashSet<>();
-        Queue<CFGNode> queue = new LinkedList<>();
-        queue.add(node);
-        
-        while (!queue.isEmpty()) {
-            CFGNode current = queue.poll();
-            if (!visited.add(current)) continue;
-            
-            if (current.varVersions.containsKey(var)) {
-                version = Math.max(version, current.varVersions.get(var));
-            }
-            
-            queue.addAll(current.predecessors);
-        }
-        
-        return version;
-    }
     private static void insertPhiFunctions(CFGNode startNode, String variable, Set<CFGNode> phiNodes,
-            Map<CFGNode, Set<String>> phiFunctions) {
-// Get nodes where the variable is assigned
-Set<CFGNode> defNodes = getDefinitionNodes(startNode, variable);
-Set<CFGNode> processedNodes = new HashSet<>();
-Queue<CFGNode> workList = new LinkedList<>(defNodes);
-
-while (!workList.isEmpty()) {
-   CFGNode defNode = workList.poll();
-   if (!processedNodes.add(defNode)) continue;
-
-   // For each node in the dominance frontier
-   for (CFGNode frontierNode : defNode.DFSet) {
-       if (phiNodes.add(frontierNode)) {
-           // Add phi function for this variable
-           phiFunctions.computeIfAbsent(frontierNode, k -> new HashSet<>()).add(variable);
-           
-           // If this frontier node also defines the variable
-           if (defNodes.contains(frontierNode)) {
-               workList.add(frontierNode);
-           }
-       }
-   }
-}
-}
+        Map<CFGNode, Set<String>> phiFunctions) {
+		// Get nodes where the variable is assigned
+		Set<CFGNode> defNodes = getDefinitionNodes(startNode, variable);
+		Set<CFGNode> processedNodes = new HashSet<>();
+		Queue<CFGNode> workList = new LinkedList<>(defNodes);
+		
+		while (!workList.isEmpty()) {
+		   CFGNode defNode = workList.poll();
+		   if (!processedNodes.add(defNode)) continue;
+		
+		   // For each node in the dominance frontier
+		   for (CFGNode frontierNode : defNode.DFSet) {
+		       if (phiNodes.add(frontierNode)) {
+		           // Add phi function for this variable
+		           phiFunctions.computeIfAbsent(frontierNode, k -> new HashSet<>()).add(variable);
+		           
+		           // If this frontier node also defines the variable
+		           if (defNodes.contains(frontierNode)) {
+		               workList.add(frontierNode);
+		           }
+		       }
+		   }
+		}
+	}
 
     private static Set<CFGNode> getDefinitionNodes(CFGNode startNode, String variable) {
         Set<CFGNode> defNodes = new HashSet<>();
