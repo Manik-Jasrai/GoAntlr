@@ -9,7 +9,7 @@ import javax.swing.SwingUtilities;
 public class GoASTMain {
     public static void main(String[] args) throws IOException {
         // Read input Go source file
-        CharStream input = CharStreams.fromFileName("D:\\Mini-Project\\GoAntlr\\src\\tests\\ex.go");
+        CharStream input = CharStreams.fromFileName("/Users/karandeepsingh/git/GoAntlr/src/tests/ex.go");
 
         // Create lexer and parser
         GoLexer lexer = new GoLexer(input);
